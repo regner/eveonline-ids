@@ -128,6 +128,7 @@ async def run():
 
     async with ClientSession(headers=headers) as session:
         for r in RANGES:
+            tasks = []
             start = r[0]
             stop = r[1]
 
