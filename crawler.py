@@ -68,34 +68,13 @@ def get_chunks(l, n):
         yield l[i:i + n]
 
 
-def get_request_bundles():
-    bundle_chunks = []
+async def fetch(session, start):
+    stop = start + PER_REQUEST
 
-    for id_type in INFO.keys():
-        base_url = INFO[id_type]['url']
-
-        for r in INFO[id_type]['ranges']:
-            start = r[0]
-            stop = r[1]
-
-            chunks = get_chunks(range(start, stop), PER_REQUEST)
-            
-            for chunk in chunks:
-                bundles.append((base_url, INFO[id_type]['parameter'], chunk))
-
-            bundle_chunks.append
-
-    return bundles
-
-
-async def fetch(session, chunk):
     params = {
         'datasource': 'tranquility',
-        f'{PARAMETER}s': ','.join(str(x) for x in chunk),
+        f'{PARAMETER}s': ','.join(str(x) for x in range(start, stop)),
     }
-
-    start = chunk[0]
-    stop = chunk[-1]
 
     logging.info(f'Making request for {PARAMETER}s with chunk {start}-{stop}.')
 
@@ -112,12 +91,11 @@ async def fetch(session, chunk):
 
 
 
-async def handle_response(response, chunk):
+async def handle_response(response, start):
     data = json.loads(response.decode('utf-8'))
 
     if len(data) > 0:
-        start = chunk[0]
-        stop = chunk[-1]
+        stop = start + PER_REQUEST
 
         logging.info(f'Got {len(data)} IDs in range {start}-{stop}.')
 
@@ -133,10 +111,10 @@ async def handle_response(response, chunk):
 
 
 
-async def bound_fetch(sem, session, chunk):
+async def bound_fetch(sem, session, start):
     async with sem:
-        response = await fetch(session, chunk)
-        await handle_response(response, chunk)
+        response = await fetch(session, start)
+        await handle_response(response, start)
 
 
 async def run():
@@ -153,10 +131,10 @@ async def run():
             start = r[0]
             stop = r[1]
 
-            chunks = get_chunks(range(start, stop), PER_REQUEST)
-            
-            for chunk in chunks:
-                task = asyncio.ensure_future(bound_fetch(sem, session, chunk))
+            current_range = range(start, stop)
+
+            for i in range(0, len(range(start, stop)), PER_REQUEST):              
+                task = asyncio.ensure_future(bound_fetch(sem, session, current_range[i]))
                 tasks.append(task)
 
             responses = asyncio.gather(*tasks)
